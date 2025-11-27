@@ -1,9 +1,10 @@
+import argparse
 import os
 import time
 from datetime import datetime, timezone
 
-import requests
 import pandas as pd
+import requests
 
 # Bearer token from your X/Twitter app
 # export X_BEARER_TOKEN="YOUR_TOKEN"
@@ -16,7 +17,6 @@ CANDIDATES = {
     "Jara": '("Jeannette Jara" OR "Jeannet Jara" OR jeannette_jara) lang:es -is:retweet',
     "Matthei": '("Evelyn Matthei" OR evelynmatthei) lang:es -is:retweet',
 }
-
 
 def bearer_oauth(r: requests.Request) -> requests.Request:
     """Attach bearer token to the request."""
@@ -43,7 +43,50 @@ def fetch_counts(query: str) -> list[dict]:
     return data.get("data", [])
 
 
+def extract_conversation_ids(csv_path: str) -> list[str]:
+    """Read a CSV and return a de-duplicated list of conversation IDs.
+
+    The CSV must include a ``conversation_id`` column.
+    """
+
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"CSV not found: {csv_path}")
+
+    df = pd.read_csv(csv_path)
+
+    if "conversation_id" not in df.columns:
+        raise KeyError("CSV must contain a 'conversation_id' column")
+
+    # Drop missing values, convert to string, and preserve order while de-duplicating.
+    seen: set[str] = set()
+    unique_ids: list[str] = []
+    for conv_id in df["conversation_id"].dropna().astype(str):
+        if conv_id not in seen:
+            seen.add(conv_id)
+            unique_ids.append(conv_id)
+
+    return unique_ids
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Fetch X counts or extract conversation IDs from a CSV.")
+    parser.add_argument(
+        "--conversation-csv",
+        help="Path to a CSV file that includes a 'conversation_id' column.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
+    if args.conversation_csv:
+        ids = extract_conversation_ids(args.conversation_csv)
+        print("\nUnique conversation_id values:\n")
+        for conv_id in ids:
+            print(conv_id)
+        return
+
     if not BEARER_TOKEN:
         raise RuntimeError("X_BEARER_TOKEN is not set in the environment.")
 
